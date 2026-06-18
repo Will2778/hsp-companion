@@ -644,6 +644,72 @@ textarea::placeholder {
   box-shadow: -3px 3px 0 -1px currentColor, 3px 3px 0 -1px currentColor;
 }
 
+/* ═══ 聆听指示器 ═══ */
+.listening-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 0 8px;
+}
+
+.listening-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #a4b8a9;
+  animation: listenPulse 1.8s ease-in-out infinite;
+}
+
+.listening-dot:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.listening-dot:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+.listening-text {
+  margin: 0 0 12px;
+  text-align: center;
+  color: #8a9c8f;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+@keyframes listenPulse {
+  0%, 60%, 100% {
+    transform: scale(0.7);
+    opacity: 0.35;
+  }
+  30% {
+    transform: scale(1.15);
+    opacity: 0.85;
+  }
+}
+
+/* ═══ 回应的第一个块不加顶部边框 ═══ */
+.response-block--first {
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* ═══ 禁用状态的按钮 ═══ */
+.primary-action[disabled] {
+  opacity: 0.55;
+  cursor: default;
+  background: linear-gradient(135deg, #4a5d53, #7d9185);
+}
+
+/* ═══ 强调文字 ═══ */
+.response-block em {
+  font-style: normal;
+  background: rgba(163, 144, 119, 0.18);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #4a3f33;
+}
+
 @keyframes breathe {
   0%,
   100% {

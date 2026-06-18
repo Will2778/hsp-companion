@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6f1e9" />
+    <title>柔声</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">高敏感友好</p>
+          <h1>柔声</h1>
+          <p class="subtitle">给情绪一个缓冲的地方</p>
+        </div>
+        <button class="icon-button" id="clearButton" type="button" aria-label="清空输入">
+          <span aria-hidden="true"></span>
+        </button>
+      </header>
+
+      <section class="view is-active" id="calmView" aria-label="缓一缓">
+        <section class="soft-card breathing-card" aria-label="呼吸引导">
+          <div class="breath-visual" aria-hidden="true">
+            <span class="breath-ring"></span>
+            <span class="breath-core"></span>
+          </div>
+          <div class="breath-copy">
+            <p class="card-kicker">先不用解决全部</p>
+            <h2 id="breathText">慢慢吸气</h2>
+            <p>你现在只需要把注意力放回身体。事情可以晚一点再想。</p>
+          </div>
+        </section>
+
+        <section class="soft-card sound-card" aria-label="轻音乐">
+          <div class="sound-main">
+            <button class="sound-toggle" id="soundToggle" type="button" aria-label="播放轻音乐">
+              <span class="sound-icon"></span>
+            </button>
+            <div>
+              <p class="card-kicker">轻音乐</p>
+              <h2 id="soundTitle">晨光钢琴</h2>
+              <p id="soundHint">点一下开始播放，很轻的环境音和几颗钢琴音。</p>
+            </div>
+          </div>
+          <div class="sound-scenes" aria-label="音乐场景">
+            <button class="scene-chip is-selected" type="button" data-scene="morning">晨光</button>
+            <button class="scene-chip" type="button" data-scene="rain">雨窗</button>
+            <button class="scene-chip" type="button" data-scene="night">夜风</button>
+          </div>
+          <label class="volume-row" for="volumeInput">
+            <span>音量</span>
+            <input id="volumeInput" type="range" min="0" max="100" value="38" />
+          </label>
+        </section>
+
+        <div class="mood-strip" aria-label="当前状态">
+          <button class="mood-chip is-selected" type="button" data-mood="被否定">被否定</button>
+          <button class="mood-chip" type="button" data-mood="反复想">反复想</button>
+          <button class="mood-chip" type="button" data-mood="人际压力">人际压力</button>
+          <button class="mood-chip" type="button" data-mood="睡前焦虑">睡前焦虑</button>
+          <button class="mood-chip" type="button" data-mood="身体紧绷">身体紧绷</button>
+        </div>
+
+        <label class="input-panel" for="storyInput">
+          <span>把刚才发生的事放在这里</span>
+          <textarea id="storyInput" rows="6" placeholder="比如：今天开会被否定了，我一直在想是不是我不够好。"></textarea>
+        </label>
+
+        <div class="control-row">
+          <div class="segmented" role="radiogroup" aria-label="回应方式">
+            <button class="tone is-selected" type="button" data-tone="soft" role="radio" aria-checked="true">更温柔</button>
+            <button class="tone" type="button" data-tone="clear" role="radio" aria-checked="false">更清醒</button>
+            <button class="tone" type="button" data-tone="friend" role="radio" aria-checked="false">像朋友</button>
+          </div>
+        </div>
+
+        <label class="range-panel" for="levelInput">
+          <span>现在的紧张程度</span>
+          <strong id="levelText">6</strong>
+          <input id="levelInput" type="range" min="1" max="10" value="6" />
+        </label>
+
+        <button class="primary-action" id="generateButton" type="button">帮我把它放轻一点</button>
+
+        <section class="result is-empty" id="resultPanel" aria-live="polite">
+          <p class="empty-text">如果写不出来，也可以只写一句：“我现在有点难受。”</p>
+        </section>
+      </section>
+
+      <section class="view" id="journalView" aria-label="记录">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">不是复盘错误</p>
+            <h2>最近被接住的时刻</h2>
+          </div>
+          <button class="text-button" id="deleteHistoryButton" type="button">清除</button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
+
+      <section class="view" id="safeView" aria-label="安全">
+        <div class="safety-panel">
+          <p class="eyebrow">紧急时先求助</p>
+          <h2>先保证你不是一个人</h2>
+          <p>如果你已经有伤害自己的计划、工具，或觉得自己撑不过今晚，请立刻联系身边可信的人、当地紧急服务或专业心理危机支持。</p>
+          <button class="primary-action secondary" id="safeTemplateButton" type="button">选中求助短信</button>
+          <textarea id="safeMessage" rows="5" readonly>我现在很难受，可能不太安全。你能马上给我打个电话，或者来陪我待一会儿吗？我不想一个人扛着。</textarea>
+        </div>
+      </section>
+
+      <nav class="tabbar" aria-label="底部导航">
+        <button class="tab is-active" type="button" data-view="calmView">
+          <span class="tab-icon calm"></span>
+          缓一缓
+        </button>
+        <button class="tab" type="button" data-view="journalView">
+          <span class="tab-icon journal"></span>
+          记录
+        </button>
+        <button class="tab" type="button" data-view="safeView">
+          <span class="tab-icon safe"></span>
+          安全
+        </button>
+      </nav>
+    </main>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

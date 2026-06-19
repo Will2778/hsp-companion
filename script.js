@@ -1,6 +1,4 @@
 const state = {
-  mood: "被否定",
-  tone: "soft",
   scene: "morning",
   playing: false,
   responding: false,
@@ -9,10 +7,6 @@ const state = {
 const storyInput = document.querySelector("#storyInput");
 const conversationStack = document.querySelector("#conversationStack");
 const initialInputPanel = document.querySelector("#initialInputPanel");
-const initialControls = document.querySelector("#initialControls");
-const initialRange = document.querySelector("#initialRange");
-const levelInput = document.querySelector("#levelInput");
-const levelText = document.querySelector("#levelText");
 const historyList = document.querySelector("#historyList");
 const breathText = document.querySelector("#breathText");
 const soundToggle = document.querySelector("#soundToggle");
@@ -22,14 +16,6 @@ const volumeInput = document.querySelector("#volumeInput");
 const generateButton = document.querySelector("#generateButton");
 
 const crisisWords = ["自杀", "不想活", "活不下去", "结束生命", "伤害自己", "想死", "撑不住了"];
-
-const moodPlaceholders = {
-  被否定: "比如：今天开会被否定了，我一直在想是不是我不够好。",
-  反复想: "比如：一句话我想了一晚上，脑子停不下来。",
-  人际压力: "比如：朋友回复很冷淡，我开始担心是不是自己做错了。",
-  睡前焦虑: "比如：一躺下就开始想今天哪里没做好，越想越清醒。",
-  身体紧绷: "比如：我心跳很快，肩膀很紧，好像随时会出事。",
-};
 
 const sceneConfig = {
   morning: {
@@ -223,29 +209,24 @@ function createContinueInput() {
   wrapper.innerHTML = `
     <textarea rows="1" placeholder="还想说什么……"></textarea>
     <div class="continue-actions">
-      <button class="text-button" data-action="edit-tone">${state.tone === 'soft' ? '更温柔' : state.tone === 'clear' ? '更清醒' : '像朋友'}</button>
       <button class="primary-action" data-action="continue">继续</button>
     </div>
   `;
 
   const textarea = wrapper.querySelector("textarea");
   const continueBtn = wrapper.querySelector('[data-action="continue"]');
-  const toneBtn = wrapper.querySelector('[data-action="edit-tone"]');
 
-  // 自动调整高度
   textarea.addEventListener("input", () => {
     textarea.style.height = "auto";
     textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px";
   });
 
-  // 点击继续
   continueBtn.addEventListener("click", () => {
     const txt = textarea.value.trim();
     if (!txt || state.responding) return;
     submitMessage(txt, wrapper);
   });
 
-  // 回车发送
   textarea.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
@@ -253,15 +234,6 @@ function createContinueInput() {
       if (!txt || state.responding) return;
       submitMessage(txt, wrapper);
     }
-  });
-
-  // 切换语气
-  toneBtn.addEventListener("click", () => {
-    const tones = ["soft", "clear", "friend"];
-    const labels = ["更温柔", "更清醒", "像朋友"];
-    const idx = tones.indexOf(state.tone);
-    state.tone = tones[(idx + 1) % 3];
-    toneBtn.textContent = labels[(idx + 1) % 3];
   });
 
   return wrapper;
@@ -274,13 +246,9 @@ function submitMessage(text, sourceWrapper) {
   if (state.responding) return;
   stopTypewriter();
 
-  const level = Number(levelInput.value);
-
   // 首次提交：隐藏初始的输入面板
   if (!initialControlsHidden) {
     initialInputPanel.classList.add("initial-hidden");
-    initialControls.classList.add("initial-hidden");
-    initialRange.classList.add("initial-hidden");
     generateButton.classList.add("initial-hidden");
     initialControlsHidden = true;
   }
@@ -293,12 +261,10 @@ function submitMessage(text, sourceWrapper) {
   const responseStream = createResponseStream();
   sentCard.after(responseStream);
 
-  // 滚动到可见
   responseStream.scrollIntoView({ behavior: "smooth", block: "center" });
 
   state.responding = true;
 
-  // 危机处理
   if (hasCrisisSignal(text)) {
     typewriterTimer = setTimeout(() => {
       revealBlocks(
@@ -311,7 +277,7 @@ function submitMessage(text, sourceWrapper) {
         () => appendContinue(responseStream)
       );
     }, 2500);
-    if (text) saveHistory(text);
+    if (text) saveHistory(text, "危机求助");
     return;
   }
 
@@ -327,13 +293,13 @@ function submitMessage(text, sourceWrapper) {
     return;
   }
 
-  const blocks = buildPersonalizedResponse(details, state.tone, level, state.mood);
+  const blocks = buildPersonalizedResponse(details);
 
   typewriterTimer = setTimeout(() => {
     revealBlocks(blocks, responseStream, () => appendContinue(responseStream));
   }, 2500);
 
-  if (text) saveHistory(text);
+  if (text) saveHistory(text, details.mood);
 }
 
 // 回应打完后，在下方插入继续输入框
@@ -366,8 +332,30 @@ function parseInput(text) {
   const trimmed = text.trim();
   if (!trimmed) return null;
 
+  // 自动推断情绪类型
+  let mood = "反复想";
+  if (/睡|夜|失眠|凌晨|躺下/.test(trimmed)) mood = "睡前焦虑";
+  else if (/心跳|呼吸|胸[口闷]|肩膀|头[疼痛晕]|肚子|胃|手[抖颤]|发[抖冷]|紧绷|喘不过气|睡不[着好]/.test(trimmed)) mood = "身体紧绷";
+  else if (/同事|朋友|家人|伴侣|对象|妈妈|爸爸|老师|同学|客户|闺蜜|兄弟|领导|老板/.test(trimmed) && /消息|回复|微信|冷淡|不理|态度|关系|吵架|冷战/.test(trimmed)) mood = "人际压力";
+  else if (/错|失败|否定|批评|丢脸|没用|不够好|太差|太弱|太笨/.test(trimmed)) mood = "被否定";
+
+  // 自动推断紧张程度
+  let level = 5;
+  const intensityCount = (trimmed.match(/(?:一直|不停|永远|总是|越来越|反复|根本|实在|真的|太|最|完全|彻底)/g) || []).length;
+  const crisisCount = (trimmed.match(/(?:撑不住|受不了|崩溃|绝望|完了|怎么办|谁来帮|救我|扛不住|顶不住)/g) || []).length;
+  const bodyCount = (trimmed.match(/(?:心跳|呼吸|胸口|胸闷|肩膀|头疼|头晕|肚子|胃|手抖|手颤|发抖|发冷|紧绷|喘不过气|睡不着)/g) || []).length;
+  level = Math.min(10, 4 + intensityCount + crisisCount * 2 + bodyCount);
+
+  // 自动选择语气
+  let tone = "soft";
+  if (/为什么|到底|到底是不是|是不是我的错|怎么办|是不是我不|我到底/.test(trimmed)) tone = "clear";
+  if (/我就说|我说真的|烦|讨厌|气死|委屈|憋屈|聊一聊|和我说|跟我说|有没有人/.test(trimmed)) tone = "friend";
+
   return {
     raw: trimmed,
+    mood: mood,
+    level: level,
+    tone: tone,
     people: (trimmed.match(/(?:领导|老板|同事|朋友|家人|伴侣|对象|妈妈|爸爸|老师|同学|客户|闺蜜|兄弟)/g) || []),
     timeClues: (trimmed.match(/(?:今天|昨天|刚才|刚刚|早上|晚上|下午|开会|面试|考试|上班|下班|睡前|躺下)/g) || []),
     bodyFeelings: (trimmed.match(/(?:心跳|呼吸|胸[口闷]|肩膀|头[疼痛晕]|肚子|胃|手[抖颤]|发[抖冷]|紧绷|喘不过气|睡不[着好])/g) || []),
@@ -379,20 +367,20 @@ function parseInput(text) {
   };
 }
 
-function buildPersonalizedResponse(details, tone, level, mood) {
+function buildPersonalizedResponse(details) {
   const blocks = [];
-  const highStress = level >= 7;
-  const crisisLevel = level >= 9;
+  const highStress = details.level >= 7;
+  const crisisLevel = details.level >= 9;
 
-  blocks.push(pickComfortOpening(details, tone, mood, highStress));
+  blocks.push(pickComfortOpening(details, details.tone, details.mood, highStress));
 
   if (details.hasStory && !crisisLevel) {
-    const reflection = buildReflection(details, mood);
+    const reflection = buildReflection(details, details.mood);
     if (reflection) blocks.push(reflection);
   }
 
-  blocks.push(buildAction(details, tone, level));
-  blocks.push(pickClosing(details, tone, mood));
+  blocks.push(buildAction(details, details.tone, details.level));
+  blocks.push(pickClosing(details, details.tone, details.mood));
 
   return blocks;
 }
@@ -537,11 +525,11 @@ function escapeHtml(value) {
   })[char]);
 }
 
-function saveHistory(text) {
+function saveHistory(text, mood) {
   const records = JSON.parse(localStorage.getItem("hsp-records") || "[]");
   records.unshift({
     text,
-    mood: state.mood,
+    mood: mood || "反复想",
     time: new Date().toLocaleString("zh-CN", {
       month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
     }),
@@ -680,33 +668,8 @@ function startBreathText() {
 
 // ═══ 事件绑定 ═══
 
-document.querySelectorAll(".mood-chip").forEach((button) => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".mood-chip").forEach((item) => item.classList.remove("is-selected"));
-    button.classList.add("is-selected");
-    state.mood = button.dataset.mood;
-    storyInput.placeholder = moodPlaceholders[state.mood];
-  });
-});
-
-document.querySelectorAll(".tone").forEach((button) => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".tone").forEach((item) => {
-      item.classList.remove("is-selected");
-      item.setAttribute("aria-checked", "false");
-    });
-    button.classList.add("is-selected");
-    button.setAttribute("aria-checked", "true");
-    state.tone = button.dataset.tone;
-  });
-});
-
 document.querySelectorAll(".scene-chip").forEach((button) => {
   button.addEventListener("click", () => updateScene(button.dataset.scene));
-});
-
-levelInput.addEventListener("input", () => {
-  levelText.textContent = levelInput.value;
 });
 
 volumeInput.addEventListener("input", () => {
@@ -738,16 +701,12 @@ document.querySelector("#clearButton").addEventListener("click", () => {
   stopTypewriter();
   state.responding = false;
 
-  // 恢复初始状态
   if (initialControlsHidden) {
     initialInputPanel.classList.remove("initial-hidden");
-    initialControls.classList.remove("initial-hidden");
-    initialRange.classList.remove("initial-hidden");
     generateButton.classList.remove("initial-hidden");
     initialControlsHidden = false;
   }
 
-  // 清除对话栈中动态添加的卡片
   const dynamicCards = conversationStack.querySelectorAll(".sent-message, .response-stream, .continue-input");
   dynamicCards.forEach(el => el.remove());
 

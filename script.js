@@ -283,12 +283,13 @@ function submitMessage(text, sourceWrapper) {
 
   const details = parseInput(text);
   if (!details) {
+    var fallbacks = shuffle([
+      "<p>有时候不确定说什么也很正常。不需要完整的句子，只要感觉到自己在试着照顾自己，这本身就已经是一步了。</p>",
+      "<p>如果写不出来，可以先不管。光是打开这个页面，就说明你在试着照顾自己。这一点本身就很好了。</p>",
+      "<p>没关系。现在不需要说什么。你可以就这样待一会儿。</p>",
+    ]);
     typewriterTimer = setTimeout(() => {
-      revealBlocks(
-        [`<p>有时候不确定说什么也很正常。不需要完整的句子，只要感觉到自己在试着照顾自己，这本身就已经是一步了。</p>`],
-        responseStream,
-        () => appendContinue(responseStream)
-      );
+      revealBlocks([fallbacks[0]], responseStream, () => appendContinue(responseStream));
     }, 2000);
     return;
   }
@@ -327,6 +328,21 @@ function updateButtonState() {
 }
 
 // ═══ 回应引擎 ═══
+
+// ═══ 文本工具 ═══
+function rnd(max) { return Math.floor(Math.random() * max); }
+function pick(arr) { return arr[rnd(arr.length)]; }
+function oneIn(n) { return rnd(n) === 0; }
+
+// 打散数组顺序，避免相同的句子每次都按同样顺序出现
+function shuffle(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = rnd(i + 1);
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
 
 function parseInput(text) {
   const trimmed = text.trim();
@@ -367,150 +383,170 @@ function parseInput(text) {
   };
 }
 
-function buildPersonalizedResponse(details) {
-  const blocks = [];
-  const highStress = details.level >= 7;
-  const crisisLevel = details.level >= 9;
+// 构建回应。不再用固定 4 块模板——每次的段落数和结构都不同
+function buildPersonalizedResponse(d) {
+  var timeRef = d.timeClues.length ? d.timeClues[0] : "刚才";
+  var personRef = d.people.length ? d.people[0] : "";
+  var quote = d.raw.length > 40 ? escapeHtml(d.raw.slice(0, 40)) + "…" : escapeHtml(d.raw);
+  var high = d.level >= 7;
+  var sp = "<br><br>";
 
-  blocks.push(pickComfortOpening(details, details.tone, details.mood, highStress));
-
-  if (details.hasStory && !crisisLevel) {
-    const reflection = buildReflection(details, details.mood);
-    if (reflection) blocks.push(reflection);
+  // 根据内容类型选不同的回应"形状"
+  if (d.isBrief && d.raw.length < 5) {
+    return [buildBriefAck(d)];
   }
 
-  blocks.push(buildAction(details, details.tone, details.level));
-  blocks.push(pickClosing(details, details.tone, details.mood));
+  if (high && d.bodyFeelings.length) {
+    return buildBodyFirstResponse(d, timeRef, quote, sp);
+  }
 
-  return blocks;
+  if (d.hasStory && d.selfCriticism.length) {
+    return oneIn(2) ? buildDeepUnpack(d, timeRef, quote, sp) : buildSoftDeflect(d, timeRef, quote, sp);
+  }
+
+  if (d.people.length && d.sceneWords.length) {
+    return buildRelationshipResponse(d, timeRef, personRef, quote, sp);
+  }
+
+  // 默认：随机选一种形状
+  var shapes = shuffle([
+    function(){return buildShortWarm(d, timeRef, quote, sp)},
+    function(){return buildTwoPart(d, timeRef, quote, sp)},
+    function(){return buildQuestionEnd(d, timeRef, quote, sp)},
+  ]);
+  return shapes[0]();
 }
 
-function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-
-function pickComfortOpening(d, tone, mood, highStress) {
-  if (d.hasStory) {
-    const timeRef = d.timeClues.length ? d.timeClues[0] : "刚才";
-    const personRef = d.people.length ? d.people[0] : "";
-    const sceneRef = d.sceneWords.length ? d.sceneWords[0] : (personRef ? personRef + "说的事" : "这件事");
-
-    const comfortPool = [
-      `<h3>先接住你</h3><p>你说的${timeRef}关于"<em>${escapeHtml(d.raw.slice(0, 40))}${d.raw.length>40?'…':''}</em>"——这件事让你难受，不是你太敏感。是这件事真的碰到了你在意的地方。</p><p>${highStress ? '先不做任何判断。现在只需要让身体知道：此刻是安全的。' : '先允许自己有这个情绪，不用急着赶走它。'}</p>`,
-
-      `<h3>先不急着分析</h3><p>${timeRef}的${sceneRef}，你到现在还在想。这种反复咀嚼不是因为你"想太多"，而是因为你比别人更在意细节、更怕伤害关系、更想把事情做好。这些品质本身没有错。</p><p>${pick(['先蹲下来。不急着站起来。','允许自己先在难受里待一会儿。','你不需要立刻变好。'])}</p>`,
-
-      `<h3>听到了</h3><p>${timeRef}发生的事情，现在还在你脑子里转。${d.intensityWords.length ? '你说"'+d.intensityWords[0]+'"——这种感觉很累，我知道。' : '这种感觉很重，我知道。'}</p><p>${pick(['不是你的问题。你只是比别人多感受了一层。','高敏感的人会更快捕捉到别人的语气和表情，所以事后反复想并不奇怪。','允许自己暂时不处理这件事。它的重量可以先放在这里，你不需要一直扛着。'])}</p>`,
-    ];
-
-    return pick(comfortPool);
-  }
-
-  if (d.isBrief) {
-    return `<h3>没关系</h3><p>有时候说不清楚才是最真实的状态。不是每次难受都需要一个完整的句子才能被看见。</p><p>${pick(['你可以就这样待一会儿。','不需要解释。','我在这里。'])}</p>`;
-  }
-
-  return `<h3>先接住你</h3><p>你现在需要的是被接住，不是被分析。${highStress ? '先让呼吸变慢，让肩膀离开耳朵。' : '先不用急着弄清楚原因。'}</p><p>${pick(['难受的时候，不用一个人撑着。','你的感觉是真实的，不需要被证明。','先把"我应该没事"放一边。你现在感觉不好，这件事本身就足够被认真对待。'])}</p>`;
+// ═══ 回应形状 1: 写了很少（一个词/短句）═══
+function buildBriefAck(d) {
+  var pool = shuffle([
+    "<p>嗯。有时候一个词就够了。不需要解释什么。</p>",
+    "<p>我听到了。不用把它展开成更完整的句子。</p>",
+    "<p>有时候" + escapeHtml(d.raw) + "就是全部了。不需要更多解释。</p>",
+    "<p>说不清楚的时候，不勉强自己说清楚，也是一种照顾自己的方式。</p>",
+    "<p>没关系。不完整的句子也可以被认真对待。</p>",
+  ]);
+  return pool[0];
 }
 
-function buildReflection(d, mood) {
-  const selfCrit = d.selfCriticism.length ? d.selfCriticism[0] : "";
-  const bodySig = d.bodyFeelings.length ? d.bodyFeelings[0] : "";
-  const reflections = [];
-
-  if (selfCrit) {
-    reflections.push(
-      `<h3>你注意到了自己说"${selfCrit}"</h3><p>这句话可能不是你自己的声音。它更像是一个内化了太久的评判者，一有机会就跳出来。</p><p>${pick(['试着把这句话的主语换成关心你的人，比如"XX觉得我不够好"。听起来就不一样了，对吗？','当你脑子里出现这句话的时候，可以问自己：这是我自己的判断，还是我害怕别人会这么想？','先不反驳它，只是看见它。它不是事实，它只是一个念头。'])}</p>`
-    );
-  }
-
-  if (bodySig) {
-    reflections.push(
-      `<h3>你的身体在说话</h3><p>"${bodySig}"——身体比大脑更早知道你在紧张。这不是你的敌人，是你的警报系统太尽责了。</p><p>${pick(['把手放在那里，什么都不做，只是让温度传过去。','你的身体不是在背叛你，它是在保护你。只是音量开太大了。','先不对抗它。感觉它，然后让它知道你注意到了。'])}</p>`
-    );
-  }
-
-  if (reflections.length === 0) {
-    reflections.push(
-      `<h3>拆开来看</h3><p>你现在感受到的，可能不止是${d.timeClues.length?d.timeClues[0]:'刚才'}这一件事。它可能勾住了之前没完全消化的东西。</p><p>${pick(['不需要一次全部理清。只是知道它们混在一起了，就已经是很大的一步。','一件事叠着另一件事的时候，会觉得特别重。不是因为你不坚强，是它们真的太多了。'])}</p>`
-    );
-  }
-
-  return pick(reflections);
+// ═══ 回应形状 2: 身体紧绷优先 grounding ═══
+function buildBodyFirstResponse(d, timeRef, quote, sp) {
+  var part = d.bodyFeelings[0];
+  var opens = shuffle([
+    "<p>" + timeRef + "你说的" + quote + "——嗯，我注意到你还提到了" + part + "。</p>",
+    "<p>你的身体已经在告诉你了。不是大脑在骗你，" + part + "是真实的感觉。</p>",
+  ]);
+  var mids = shuffle([
+    "<p>现在把手放在" + part + "上面。不用按摩，什么都不用做。手心温度传过去就行。10 秒。然后呼一口气，让肩膀往下沉一点。</p>",
+    "<p>身体的紧张不是敌人。它是一个在拼命保护你的警报器。只是音量开太大了。先不跟它辩论，只是让它知道——你注意到了。</p>",
+    "<p>先不处理事情。先处理身体。你可以在椅子上坐得更重一点，让脚底板完全贴在地上。感觉一下重量往下走。</p>",
+  ]);
+  var closes = shuffle([
+    "<p>等你身体降下来了，那些想法会变轻。不是消失了，是不再揪着你了。</p>",
+    "<p>事情可以晚一点再想。身体说它需要被接住，那就先接住它。</p>",
+    "",
+  ]);
+  return [opens[0] + sp + mids[0] + (closes[0] ? sp + closes[0] : "")];
 }
 
-function buildAction(d, tone, level) {
-  const needGrounding = level >= 8;
-  const hasPeople = d.people.length > 0;
-  const hasBody = d.bodyFeelings.length > 0;
-  const hasSelfCrit = d.selfCriticism.length > 0;
-
-  if (needGrounding) {
-    return `<h3>现在做一件很小的事</h3><p>先不用想任何事。找到一个你能看到的物体，说出它的名字、颜色、质感。然后是第二个。然后是第三个。</p><p>等你感觉自己还在这个房间里，再决定要不要继续想。${pick(['先回到身体里。别的事可以等。','让世界先安静 30 秒。不是逃避，是给自己缓冲。'])}</p>`;
-  }
-
-  const actions = [];
-
-  if (hasBody) {
-    const part = d.bodyFeelings[0];
-    actions.push(
-      `<h3>对你的身体做一件事</h3><p>你说的"${part}"——现在把手放在那个部位上面，或者附近。不用按摩，不用放松，只是让手心温度传过去。</p><p>${pick(['10 秒就够了。','这不是在解决问题，是在给你的身体一点信号：我知道你在紧张。','边放边呼一口气，让肩胛骨往下沉一厘米就好。'])}</p>`
-    );
-  }
-
-  if (hasSelfCrit) {
-    const criticism = d.selfCriticism[0];
-    actions.push(
-      `<h3>把这个声音写下来</h3><p>拿出手机备忘录，把"${criticism}"这句话打出来。然后在下面写一句：<strong>这是焦虑说的话，不等于实际情况。</strong></p><p>${pick(['写完就不用再跟它辩论了。先放一边。','然后关掉备忘录，去做一件不需要动脑的事。','你不需要反驳它，也不需要相信它。只是把它从脑子里挪到屏幕上。'])}</p>`
-    );
-  }
-
-  if (hasPeople) {
-    const person = d.people[0];
-    actions.push(
-      `<h3>关于${person}</h3><p>${pick([
-        '你不需要在今天之内弄懂对方在想什么。不知道也没关系。',
-        '对方的反应可能和你的表现无关。人的沟通有很多层，你只听到了其中一层。',
-        '一个人的一句话、一次反应，不够定义你整个人。你现在只是被刺痛了，不是被判定了。',
-      ])}</p><p>${pick(['先给自己 24 小时，之后再说。','今晚的目标不是想通，是让自己先睡一觉。'])}</p>`
-    );
-  }
-
-  if (actions.length === 0) {
-    actions.push(
-      `<h3>一件很小的事</h3><p>${pick([
-        '离开屏幕，去喝一杯水。慢慢喝。感觉水从喉咙流下去。然后回来。',
-        '站起来，走到窗户旁边，看远处的任何东西 30 秒。不需要想什么。',
-        '找一个你喜欢的触感：毛衣的袖子、杯子的温度、枕头的一角。摸 10 秒钟。',
-        '如果你愿意，可以给自己发一条语音微信，就当在跟朋友说话。说完不用发出去。',
-      ])}</p>`
-    );
-  }
-
-  return pick(actions);
+// ═══ 回应形状 3: 深入拆解自我批判 ═══
+function buildDeepUnpack(d, timeRef, quote, sp) {
+  var criticism = d.selfCriticism[0];
+  var opens = shuffle([
+    "<p>" + quote + "——你说你" + criticism + "。这句话你在心里说了多久了？</p>",
+    "<p>我注意到" + timeRef + "的事情里，你反复用了一个词：" + criticism + "。</p>",
+  ]);
+  var mids = shuffle([
+    "<p>这句话可能不是你的声音。它像是一个住了很久的访客，一遇到事就自动跳出来替你说话。但它不是你。</p>" + sp + "<p>试着把主语换一下。如果是你关心的人说\"" + criticism + "\"，你会怎么回他？你会说你不够好吗？还是你会说——等一下，不是这样的，你只是……</p>",
+    "<p>焦虑有一个习惯：它会把一个片段撑大，大到盖住你整个人。" + timeRef + "的事，它是" + timeRef + "的事。它不等于你是什么样的人。</p>" + sp + "<p>分开它们。不是今天之内。只是慢慢来。</p>",
+    "<p>先不反驳它。只是看见它。看见它每次都在你受伤的时候跳出来。它可能曾经保护过你——用否定自己来避免被别人否定。但现在你不需要这种保护了。</p>",
+  ]);
+  var closes = shuffle([
+    "<p>你可以拿出手机，在备忘录里打一行字：<strong>这是焦虑说的话，不等于实际情况。</strong>写完就关掉。不用再跟它对话了。</p>",
+    "<p>你不需要今天就说服自己。只是从" + criticism + "到你\可能没你想的那么糟\"之间，还隔着很多可能性。先不急着跳到结论。</p>",
+  ]);
+  return [opens[0] + sp + mids[0] + sp + closes[0]];
 }
 
-function pickClosing(d, tone, mood) {
-  const closings = {
-    soft: [
-      "你可以敏感，也可以慢慢恢复。此刻不需要立刻变得完美。",
-      "不是所有的低落都需要被解决。有些时候，只是需要被陪着。",
-      "高敏感不是弱点。你比别人更早感受到风，也更容易被风刮到——这只是一件事的两面。",
-      "你的感受不需要被证明是合理的。它在这里，就已经足够被认真对待。",
-      "先不用忙着变好。先在这里待一会儿。",
-    ],
-    clear: [
-      "先处理事实，再处理想象。两者都值得被看见，但不用混在一起。",
-      "焦虑的声音很大，但不等于它的内容是对的。把它当成一个过度尽责的警报，而不是事实播报。",
-      "你今天不需要得出任何结论。可以先放下，明天再捡起来看。",
-    ],
-    friend: [
-      "你不是麻烦，也不是想太多。你只是需要一个更轻的落点。",
-      "说真的，你已经很努力了。休息一下不是放弃，是在给自己续杯。",
-      "要是我在你旁边，我会先陪你坐一会儿，不急着分析，也不逼你马上开心。",
-    ],
-  };
+// ═══ 回应形状 4: 柔软转移注意力 ═══
+function buildSoftDeflect(d, timeRef, quote, sp) {
+  var opens = shuffle([
+    "<p>你说的我看到了。先不分析它。</p>",
+    "<p>" + quote + "。嗯。今天不想给你拆开看。</p>",
+  ]);
+  var mids = shuffle([
+    "<p>有时候一直想一件事情，是在试着控制它。好像想透了就不会再难受了。但有些东西不是靠想通的。是靠时间泡软的。</p>" + sp + "<p>今晚可以不做这件事。把它放在这里，你去做别的。明天再捡起来——它不会跑掉的。</p>",
+    "<p>你在反复咀嚼，不是因为矫情。是因为你比很多人更认真，更想把事情做对。先肯定自己这一点。然后允许自己暂时不做对。今天就到这里。</p>" + sp + "<p>离开屏幕。去倒一杯水。慢慢喝。感觉水从喉咙下去。然后再决定要不要继续想。</p>",
+    "<p>你的大脑在帮你工作，只是加班太久了。让它休息。不是赶它走，是跟它说：辛苦了，我接手，你去旁边坐一会儿。</p>",
+  ]);
+  var closes = shuffle([
+    "<p>今晚不需要想通。能睡着就已经是赢了。</p>",
+    "<p>很多事情第二天起来，会比昨晚小很多。不是它变了，是你休息过了。</p>",
+    "<p>先停在这里。不做总结。不给自己布置作业。</p>",
+  ]);
+  return [opens[0] + sp + mids[0] + sp + closes[0]];
+}
 
-  const pool = closings[tone] || closings.soft;
-  return `<h3>留给自己的话</h3><p class="comfort-line">${pick(pool)}</p>`;
+// ═══ 回应形状 5: 人际关系 ═══
+function buildRelationshipResponse(d, timeRef, personRef, quote, sp) {
+  var person = personRef || "对方";
+  var opens = shuffle([
+    "<p>" + quote + "——" + person + "的反应，你到现在还在想。这种反复扫描是高敏感的人很常见的反应。不是你的问题。</p>",
+    "<p>嗯。" + timeRef + "和" + person + "的事。</p>",
+  ]);
+  var mids = shuffle([
+    "<p>一个人的一句话、一次回复、一个表情——它只是那一刻的切片。不够定义你，也不够判断你们整个关系。你现在只是被刺痛了，不是被判定了。</p>" + sp + "<p>你不需要在今天之内弄懂" + person + "在想什么。不知道也可以。给彼此一点时间。</p>",
+    "<p>人的沟通有很多层。" + person + "当时的回复可能和你无关——也许是对方忙，也许对方也在想自己的事，也许你听到的语气只是你自己投射的担心。" + sp + "<p>分开来看：事实是对方回了什么（客观的一句话）。解读是你觉得这意味着什么（可能被拒绝/被讨厌）。两者不一样。</p>",
+  ]);
+  var closes = shuffle([
+    "<p>先给自己 24 小时。24 小时后如果还在想，那时候再处理。今天的目标不是想通，是让自己不被这件事占满。</p>",
+    "<p>你现在需要的可能不是答案，是先把这份担心从肩膀上拿下来一会儿。然后再说。</p>",
+  ]);
+  return [opens[0] + sp + mids[0] + sp + closes[0]];
+}
+
+// ═══ 回应形状 6: 简短温暖 ═══
+function buildShortWarm(d, timeRef, quote, sp) {
+  var pool = shuffle([
+    "<p>" + quote + "——嗯，听到了。</p>" + sp + "<p>不用急着处理它。先知道有人听到了。不是所有情绪都要立刻被解决。有些就只是需要被见证。</p>" + sp + "<p>先不用忙着变好。先在这里待一会儿。</p>",
+    "<p>谢谢你写出来。不是所有难受都能被组织成完整的句子，但你做了。这本身就是一步。</p>" + sp + "<p>今天不需要得出结论。你只需要知道自己不是一个人在想这件事。</p>" + sp + "<p>可以先放一放。不是逃避，是给自己一个呼吸的间隙。</p>",
+    "<p>" + timeRef + "的事，到现在还在你脑子里。这种感觉很重，我知道。</p>" + sp + "<p>先不对抗它。就像水里有沙，你越搅越浑。先不动。让它自己沉一沉。不是说事情不重要——是说你比事情更重要。</p>",
+  ]);
+  return [pool[0]];
+}
+
+// ═══ 回应形状 7: 两段式 ═══
+function buildTwoPart(d, timeRef, quote, sp) {
+  var opens = shuffle([
+    "<p>你说的我看了两遍。</p><p>" + quote + "</p>",
+    "<p>嗯。这件事让你难受，不是因为它小，是因为它碰到了你在意的地方。</p>",
+    "<p>" + timeRef + "发生的事，现在还在转。那种感觉我懂。</p>",
+  ]);
+  var closes = shuffle([
+    "<p>现在有一个很小的事可以做：把手放在胸口，只是放上去。感觉到心跳。什么都不用做。让它知道你在这里。</p><p>然后去喝一杯水。慢慢喝。喝完再决定要不要继续想。</p>",
+    "<p>你需要的话可以继续写。不需要的话就停在这里。都由你。</p>",
+    "<p>不是所有的难受都需要分析。有时候只是需要被陪着。先坐一会儿。</p>",
+    "<p>你可以敏感，也可以慢慢恢复。此刻不需要立刻变好。</p>",
+  ]);
+  return [opens[0] + sp + closes[0]];
+}
+
+// ═══ 回应形状 8: 结尾丢一个温和的问题 ═══
+function buildQuestionEnd(d, timeRef, quote, sp) {
+  var opens = shuffle([
+    "<p>" + quote + "——嗯。你先说出来了，已经比憋着的时候好了很多。</p>",
+    "<p>我听到了。你现在不是一个人在想这件事。</p>",
+  ]);
+  var mids = shuffle([
+    "<p>有时候难受不是一下子来的，是好多件小事情慢慢堆起来的。" + timeRef + "可能只是最后一根稻草。那些之前没消化的东西，我们可以慢慢看。</p>",
+    "<p>先不强迫自己想通。有时候越想越紧，反而是停下来、去做一件不动脑的事，答案自己浮出来。</p>",
+  ]);
+  var closes = shuffle([
+    "<p>你有经常在哪里写写东西吗？备忘录？还是跟朋友说？</p>",
+    "<p>如果现在让你给自己发一条语音微信，你会说什么？（不一定要发出去）</p>",
+    "<p>除了这件事，今天还有什么让你稍微好一点的时刻吗？哪怕只是阳光照进来、或者喝到一杯不烫不凉的水。</p>",
+  ]);
+  return [opens[0] + sp + mids[0] + sp + closes[0]];
 }
 
 function hasCrisisSignal(text) {

@@ -63,30 +63,30 @@
           <button class="mood-chip" type="button" data-mood="身体紧绷">身体紧绷</button>
         </div>
 
-        <label class="input-panel" for="storyInput">
-          <span>把刚才发生的事放在这里</span>
-          <textarea id="storyInput" rows="6" placeholder="比如：今天开会被否定了，我一直在想是不是我不够好。"></textarea>
-        </label>
+        <!-- 对话流：输入 → 回应 → 再输入 → 循环 -->
+        <div class=”conversation-stack” id=”conversationStack” aria-live=”polite”>
+          <!-- 初始输入卡片 -->
+          <label class=”input-panel” id=”initialInputPanel” for=”storyInput”>
+            <span>把刚才发生的事放在这里</span>
+            <textarea id=”storyInput” rows=”5” placeholder=”比如：今天开会被否定了，我一直在想是不是我不够好。”></textarea>
+          </label>
 
-        <div class="control-row">
-          <div class="segmented" role="radiogroup" aria-label="回应方式">
-            <button class="tone is-selected" type="button" data-tone="soft" role="radio" aria-checked="true">更温柔</button>
-            <button class="tone" type="button" data-tone="clear" role="radio" aria-checked="false">更清醒</button>
-            <button class="tone" type="button" data-tone="friend" role="radio" aria-checked="false">像朋友</button>
+          <div class=”control-row” id=”initialControls”>
+            <div class=”segmented” role=”radiogroup” aria-label=”回应方式”>
+              <button class=”tone is-selected” type=”button” data-tone=”soft” role=”radio” aria-checked=”true”>更温柔</button>
+              <button class=”tone” type=”button” data-tone=”clear” role=”radio” aria-checked=”false”>更清醒</button>
+              <button class=”tone” type=”button” data-tone=”friend” role=”radio” aria-checked=”false”>像朋友</button>
+            </div>
           </div>
+
+          <label class=”range-panel” id=”initialRange” for=”levelInput”>
+            <span>现在的紧张程度</span>
+            <strong id=”levelText”>6</strong>
+            <input id=”levelInput” type=”range” min=”1” max=”10” value=”6” />
+          </label>
+
+          <button class=”primary-action” id=”generateButton” type=”button”>帮我把它放轻一点</button>
         </div>
-
-        <label class="range-panel" for="levelInput">
-          <span>现在的紧张程度</span>
-          <strong id="levelText">6</strong>
-          <input id="levelInput" type="range" min="1" max="10" value="6" />
-        </label>
-
-        <button class="primary-action" id="generateButton" type="button">帮我把它放轻一点</button>
-
-        <section class="result is-empty" id="resultPanel" aria-live="polite">
-          <p class="empty-text">如果写不出来，也可以只写一句：“我现在有点难受。”</p>
-        </section>
       </section>
 
       <section class="view" id="journalView" aria-label="记录">

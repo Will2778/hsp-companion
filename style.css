@@ -701,6 +701,109 @@ textarea::placeholder {
   background: linear-gradient(135deg, #4a5d53, #7d9185);
 }
 
+/* ═══ 对话流 ═══ */
+
+.conversation-stack {
+  display: grid;
+  gap: 12px;
+}
+
+/* 用户刚刚发出的文字卡片 */
+.sent-message {
+  position: relative;
+  padding: 13px 15px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.70);
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 20px rgba(91, 78, 56, 0.06);
+  animation: sentIn 0.5s ease;
+}
+
+.sent-message::before {
+  content: "你说的";
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.sent-message p {
+  margin: 0;
+  line-height: 1.65;
+  color: #3e3d38;
+}
+
+@keyframes sentIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 回应正在逐字打出的卡片 */
+.response-stream {
+  min-height: 80px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 12px 36px rgba(91, 78, 56, 0.08);
+  animation: sentIn 0.5s ease;
+}
+
+/* 回应完成后的继续输入区 */
+.continue-input {
+  display: grid;
+  gap: 8px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  animation: sentIn 0.5s ease;
+  animation-fill-mode: backwards;
+}
+
+.continue-input textarea {
+  width: 100%;
+  min-height: 44px;
+  max-height: 120px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  color: var(--ink);
+  background: transparent;
+  line-height: 1.65;
+  font-size: 14px;
+}
+
+.continue-input textarea::placeholder {
+  color: #9a9388;
+}
+
+.continue-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.continue-actions .text-button {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.continue-actions .primary-action {
+  width: auto;
+  min-height: 38px;
+  margin-top: 0;
+  padding: 10px 20px;
+  font-size: 13px;
+}
+
+/* 隐藏初始控件 */
+.initial-hidden {
+  display: none !important;
+}
+
 /* ═══ 强调文字 ═══ */
 .response-block em {
   font-style: normal;

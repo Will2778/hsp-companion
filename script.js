@@ -7,7 +7,10 @@ const state = {
 };
 
 const storyInput = document.querySelector("#storyInput");
-const resultPanel = document.querySelector("#resultPanel");
+const conversationStack = document.querySelector("#conversationStack");
+const initialInputPanel = document.querySelector("#initialInputPanel");
+const initialControls = document.querySelector("#initialControls");
+const initialRange = document.querySelector("#initialRange");
 const levelInput = document.querySelector("#levelInput");
 const levelText = document.querySelector("#levelText");
 const historyList = document.querySelector("#historyList");
@@ -52,57 +55,37 @@ function stopTypewriter() {
   if (typewriterTimer) { clearTimeout(typewriterTimer); typewriterTimer = null; }
 }
 
-// 在容器内逐句揭示 HTML。每个句子之间停顿。
-// blocks: HTML 字符串数组
-// onComplete: 全部完成后回调
-function revealBlocks(blocks, onComplete) {
-  const container = resultPanel;
+// 在给定的容器中逐块揭示回应。container 是 response-stream 元素的引用。
+function revealBlocks(blocks, container, onComplete) {
   let blockIndex = 0;
-
-  // 清空
   container.innerHTML = "";
-  container.classList.remove("is-empty");
 
   function showNextBlock() {
     if (blockIndex >= blocks.length) {
-      // 全部完成
       state.responding = false;
-      updateButtonState();
       if (onComplete) onComplete();
       return;
     }
 
     const blockHTML = blocks[blockIndex];
     const blockEl = document.createElement("div");
-
-    // 第一个 block 不需要 border-top
-    if (blockIndex === 0) {
-      blockEl.className = "response-block response-block--first";
-    } else {
-      blockEl.className = "response-block";
-    }
-
+    blockEl.className = blockIndex === 0 ? "response-block response-block--first" : "response-block";
     blockEl.style.opacity = "0";
     blockEl.style.transform = "translateY(6px)";
     blockEl.innerHTML = blockHTML;
     container.appendChild(blockEl);
 
-    // 块出现动画
     requestAnimationFrame(() => {
       blockEl.style.transition = "opacity 0.8s ease, transform 0.8s ease";
       blockEl.style.opacity = "1";
       blockEl.style.transform = "translateY(0)";
     });
 
-    // 然后逐句揭示这个块内的文字
     revealBlockContent(blockEl, () => {
       blockIndex++;
-
-      // 块之间的停顿：根据内容决定
       const blockPause = blockIndex === blocks.length
-        ? 0                           // 最后一个块之后不停顿
-        : (blockIndex === blocks.length - 1 ? 2200 : 1800);  // 倒数第二块到收尾之间停久一点
-
+        ? 0
+        : (blockIndex === blocks.length - 1 ? 2200 : 1800);
       typewriterTimer = setTimeout(showNextBlock, blockPause);
     });
   }
@@ -207,19 +190,173 @@ function splitSentences(text) {
   return sentences;
 }
 
+// ═══ 对话流 ═══
+
+// 创建一个 send-message 卡片显示用户刚写的文字
+function createSentCard(text) {
+  const card = document.createElement("div");
+  card.className = "sent-message";
+  card.innerHTML = `<p>${escapeHtml(text)}</p>`;
+  return card;
+}
+
+// 创建一个 response-stream 卡片，打字机会往里写
+function createResponseStream() {
+  const card = document.createElement("div");
+  card.className = "response-stream";
+  card.innerHTML = `
+    <div class="listening-indicator">
+      <span class="listening-dot"></span>
+      <span class="listening-dot"></span>
+      <span class="listening-dot"></span>
+    </div>
+    <p class="listening-text">正在听……</p>
+  `;
+  return card;
+}
+
+// 创建一个继续输入框
+function createContinueInput() {
+  const wrapper = document.createElement("div");
+  wrapper.className = "continue-input";
+  wrapper.style.animationDelay = "0.6s";
+  wrapper.innerHTML = `
+    <textarea rows="1" placeholder="还想说什么……"></textarea>
+    <div class="continue-actions">
+      <button class="text-button" data-action="edit-tone">${state.tone === 'soft' ? '更温柔' : state.tone === 'clear' ? '更清醒' : '像朋友'}</button>
+      <button class="primary-action" data-action="continue">继续</button>
+    </div>
+  `;
+
+  const textarea = wrapper.querySelector("textarea");
+  const continueBtn = wrapper.querySelector('[data-action="continue"]');
+  const toneBtn = wrapper.querySelector('[data-action="edit-tone"]');
+
+  // 自动调整高度
+  textarea.addEventListener("input", () => {
+    textarea.style.height = "auto";
+    textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px";
+  });
+
+  // 点击继续
+  continueBtn.addEventListener("click", () => {
+    const txt = textarea.value.trim();
+    if (!txt || state.responding) return;
+    submitMessage(txt, wrapper);
+  });
+
+  // 回车发送
+  textarea.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      const txt = textarea.value.trim();
+      if (!txt || state.responding) return;
+      submitMessage(txt, wrapper);
+    }
+  });
+
+  // 切换语气
+  toneBtn.addEventListener("click", () => {
+    const tones = ["soft", "clear", "friend"];
+    const labels = ["更温柔", "更清醒", "像朋友"];
+    const idx = tones.indexOf(state.tone);
+    state.tone = tones[(idx + 1) % 3];
+    toneBtn.textContent = labels[(idx + 1) % 3];
+  });
+
+  return wrapper;
+}
+
+let initialControlsHidden = false;
+
+// 提交消息的核心逻辑
+function submitMessage(text, sourceWrapper) {
+  if (state.responding) return;
+  stopTypewriter();
+
+  const level = Number(levelInput.value);
+
+  // 首次提交：隐藏初始的输入面板
+  if (!initialControlsHidden) {
+    initialInputPanel.classList.add("initial-hidden");
+    initialControls.classList.add("initial-hidden");
+    initialRange.classList.add("initial-hidden");
+    generateButton.classList.add("initial-hidden");
+    initialControlsHidden = true;
+  }
+
+  // 替换来源卡片：输入区 → sent 卡片
+  const sentCard = createSentCard(text);
+  sourceWrapper.replaceWith(sentCard);
+
+  // 在 sent 卡片后面插入 response-stream
+  const responseStream = createResponseStream();
+  sentCard.after(responseStream);
+
+  // 滚动到可见
+  responseStream.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  state.responding = true;
+
+  // 危机处理
+  if (hasCrisisSignal(text)) {
+    typewriterTimer = setTimeout(() => {
+      revealBlocks(
+        [
+          `<h3>现在先把安全放到第一位</h3><p>你写的内容里有很强的危险信号。请不要一个人扛着，立刻联系身边可信的人、当地紧急服务或专业心理危机支持。</p>`,
+          `<h3>可以直接发出的短信</h3><p>我现在很难受，可能不太安全。你能马上联系我，或者来陪我一会儿吗？我不想一个人扛着。</p>`,
+          `<h3>先保证你不是一个人</h3><p>你不是负担。你只是需要一只手。让别人握住它。</p>`,
+        ],
+        responseStream,
+        () => appendContinue(responseStream)
+      );
+    }, 2500);
+    if (text) saveHistory(text);
+    return;
+  }
+
+  const details = parseInput(text);
+  if (!details) {
+    typewriterTimer = setTimeout(() => {
+      revealBlocks(
+        [`<p>有时候不确定说什么也很正常。不需要完整的句子，只要感觉到自己在试着照顾自己，这本身就已经是一步了。</p>`],
+        responseStream,
+        () => appendContinue(responseStream)
+      );
+    }, 2000);
+    return;
+  }
+
+  const blocks = buildPersonalizedResponse(details, state.tone, level, state.mood);
+
+  typewriterTimer = setTimeout(() => {
+    revealBlocks(blocks, responseStream, () => appendContinue(responseStream));
+  }, 2500);
+
+  if (text) saveHistory(text);
+}
+
+// 回应打完后，在下方插入继续输入框
+function appendContinue(responseStream) {
+  const continueInput = createContinueInput();
+  responseStream.after(continueInput);
+  continueInput.querySelector("textarea").focus();
+}
+
 // ═══ 按钮状态 ═══
 
 function updateButtonState() {
-  if (state.responding) {
-    generateButton.textContent = "正在听……";
-    generateButton.disabled = true;
-    generateButton.style.opacity = "0.7";
-    generateButton.style.cursor = "default";
-  } else {
-    generateButton.textContent = "帮我把它放轻一点";
-    generateButton.disabled = false;
-    generateButton.style.opacity = "1";
-    generateButton.style.cursor = "pointer";
+  // generateButton 在第一次提交后就被隐藏了，这里只需处理初始按钮
+  if (!initialControlsHidden && generateButton) {
+    if (state.responding) {
+      generateButton.textContent = "正在听……";
+      generateButton.disabled = true;
+      generateButton.style.opacity = "0.7";
+    } else {
+      generateButton.textContent = "帮我把它放轻一点";
+      generateButton.disabled = false;
+      generateButton.style.opacity = "1";
+    }
   }
 }
 
@@ -390,71 +527,6 @@ function pickClosing(d, tone, mood) {
 
 function hasCrisisSignal(text) {
   return crisisWords.some((word) => text.includes(word));
-}
-
-// ═══ 主流程 ═══
-
-function handleGenerate() {
-  if (state.responding) return;
-
-  stopTypewriter();
-  const text = storyInput.value.trim();
-  const level = Number(levelInput.value);
-
-  // 开始回应状态
-  state.responding = true;
-  updateButtonState();
-
-  // 先显示聆听状态
-  resultPanel.classList.remove("is-empty");
-  resultPanel.innerHTML = `
-    <div class="listening-indicator">
-      <span class="listening-dot"></span>
-      <span class="listening-dot"></span>
-      <span class="listening-dot"></span>
-    </div>
-    <p class="listening-text">正在听……</p>
-  `;
-
-  // 危机处理
-  if (hasCrisisSignal(text)) {
-    typewriterTimer = setTimeout(() => {
-      revealBlocks(
-        [
-          `<h3>现在先把安全放到第一位</h3><p>你写的内容里有很强的危险信号。请不要一个人扛着，立刻联系身边可信的人、当地紧急服务或专业心理危机支持。</p>`,
-          `<h3>可以直接发出的短信</h3><p>我现在很难受，可能不太安全。你能马上联系我，或者来陪我一会儿吗？我不想一个人扛着。</p>`,
-          `<h3>先保证你不是一个人</h3><p>你不是负担。你只是需要一只手。让别人握住它。</p>`,
-        ],
-        () => {
-          // 结束后不留任何催促
-        }
-      );
-    }, 2500);
-    return;
-  }
-
-  const details = parseInput(text);
-  if (!details) {
-    typewriterTimer = setTimeout(() => {
-      revealBlocks(
-        [`<p>有时候不确定说什么也很正常。不需要完整的句子，只要感觉到自己在试着照顾自己，这本身就已经是一步了。</p>`],
-        () => {}
-      );
-    }, 2000);
-    return;
-  }
-
-  const blocks = buildPersonalizedResponse(details, state.tone, level, state.mood);
-
-  // 2.5 秒聆听停顿，然后开始逐字揭示
-  typewriterTimer = setTimeout(() => {
-    revealBlocks(blocks, () => {
-      // 全部结束后：不追问，不催促，不留任何"你感觉好点了吗"
-      // 只是安静地让文字留在屏幕上
-    });
-  }, 2500);
-
-  if (text && !hasCrisisSignal(text)) saveHistory(text);
 }
 
 // ═══ 辅助 ═══
@@ -646,23 +718,41 @@ soundToggle.addEventListener("click", () => {
   else startAudio();
 });
 
-generateButton.addEventListener("click", handleGenerate);
+generateButton.addEventListener("click", () => {
+  const text = storyInput.value.trim();
+  if (!text || state.responding) return;
+  submitMessage(text, initialInputPanel);
+});
 
-// 回车也能提交（但不要 ctrl+enter 误触）
+// 回车也能提交
 storyInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
-    handleGenerate();
+    const text = storyInput.value.trim();
+    if (!text || state.responding) return;
+    submitMessage(text, initialInputPanel);
   }
 });
 
 document.querySelector("#clearButton").addEventListener("click", () => {
   stopTypewriter();
   state.responding = false;
-  updateButtonState();
+
+  // 恢复初始状态
+  if (initialControlsHidden) {
+    initialInputPanel.classList.remove("initial-hidden");
+    initialControls.classList.remove("initial-hidden");
+    initialRange.classList.remove("initial-hidden");
+    generateButton.classList.remove("initial-hidden");
+    initialControlsHidden = false;
+  }
+
+  // 清除对话栈中动态添加的卡片
+  const dynamicCards = conversationStack.querySelectorAll(".sent-message, .response-stream, .continue-input");
+  dynamicCards.forEach(el => el.remove());
+
   storyInput.value = "";
-  resultPanel.classList.add("is-empty");
-  resultPanel.innerHTML = `<p class="empty-text">如果写不出来，也可以只写一句："我现在有点难受。"</p>`;
+  storyInput.focus();
 });
 
 document.querySelectorAll(".tab").forEach((tab) => {
